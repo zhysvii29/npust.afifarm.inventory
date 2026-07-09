@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牛組盤點系統</title>
+    <!-- 引入外部 Excel 導出核心引擎 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --cow-black: #151515;
+            --cow-white: #ffffff;
+            --grass-green: #2ecc71;
+            --grass-dark: #27ae60;
+            --milk-blue: #e8f4fd;
+            --accent-orange: #e67e22;
+            --border-color: #cccccc;
+            --text-main: #222222;
+        }
+        
+        /* 指定字體：中文標楷體，英文 Times New Roman */
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: "Times New Roman", "BiauKai", "標楷體", STKaiti, serif; 
+        }
+        
+        /* 荷蘭牛黑白斑紋背景 */
+        body { 
+            background-color: #f4f6f9; 
+            background-image: 
+                radial-gradient(ellipse at 15% 15%, var(--cow-black) 0%, var(--cow-black) 12%, transparent 13%),
+                radial-gradient(ellipse at 85% 20%, var(--cow-black) 0%, var(--cow-black) 18%, transparent 19%),
+                radial-gradient(ellipse at 50% 85%, var(--cow-black) 0%, var(--cow-black) 15%, transparent 16%),
+                radial-gradient(ellipse at 20% 65%, var(--cow-black) 0%, var(--cow-black) 10%, transparent 11%),
+                radial-gradient(ellipse at 80% 75%, var(--cow-black) 0%, var(--cow-black) 14%, transparent 15%),
+                radial-gradient(ellipse at 40% 30%, var(--cow-black) 0%, var(--cow-black) 8%, transparent 9%);
+            background-size: 400px 400px;
+            color: var(--text-main); 
+            padding: 15px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+        
+        /* 主容器 */
+        .container { 
+            width: 100%; 
+            max-width: 1200px; 
+            background: var(--cow-white); 
+            border-radius: 16px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15); 
+            padding: 20px; 
+            margin-bottom: 30px; 
+            border: 5px solid var(--cow-black);
+            position: relative;
+        }
+
+        /* 裝飾性乳牛斑塊橫條 */
+        .cow-bar {
+            height: 15px;
+            background: var(--cow-black);
+            background-image: linear-gradient(90deg, var(--cow-white) 25%, transparent 25%, transparent 50%, var(--cow-white) 50%, var(--cow-white) 75%, transparent 75%, transparent);
+            background-size: 80px 15px;
+            margin: -20px -20px 20px -20px;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+        
+        header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 3px dashed var(--cow-black); 
+            padding-bottom: 16px; 
+            margin-bottom: 20px; 
+            flex-wrap: wrap; 
+            gap: 15px; 
+        }
+        .logo-title h1 { color: var(--cow-black); font-size: 22px; display: flex; align-items: center; gap: 10px; line-height: 1.3; }
+        .logo-title p { font-size: 14px; color: #555; margin-top: 6px; font-weight: bold; }
+        
+        .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .btn { padding: 10px 16px; border: 3px solid var(--cow-black); border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease; font-size: 14px; box-shadow: 2px 2px 0px var(--cow-black); }
+        .btn:active { transform: translate(2px, 2px); box-shadow: 0px 0px 0px var(--cow-black); }
+        .btn:disabled { background-color: #f1f2f6 !important; color: #a4b0be !important; border-color: #cccccc !important; box-shadow: none !important; cursor: not-allowed; transform: none !important; }
+        
+        .btn-primary { background-color: var(--cow-black); color: var(--cow-white); }
+        .btn-success { background-color: var(--grass-green); color: var(--cow-black); }
+        .btn-success:hover { background-color: var(--grass-dark); }
+        .btn-secondary { background-color: var(--cow-white); color: var(--cow-black); }
+        .btn-danger { background-color: #ff7675; color: var(--cow-black); }
+        .btn-warning { background-color: #ffeaa7; color: var(--cow-black); }
+        .btn-cloud { background-color: #74b9ff; color: var(--cow-black); }
+        
+        /* 縮小版的按鈕專門給小功能用 */
+        .btn-sm { padding: 4px 8px; font-size: 12px; border: 2px solid var(--cow-black); border-radius: 6px; box-shadow: 1px 1px 0px var(--cow-black); }
+        
+        .admin-badge { background-color: #ffebee; color: #c62828; padding: 4px 8px; border: 2px solid #c62828; border-radius: 4px; font-size: 12px; font-weight: bold; display: none; }
+        .lock-badge { background-color: #fff3e0; color: #ef6c00; padding: 4px 8px; border: 2px solid #ef6c00; border-radius: 4px; font-size: 12px; font-weight: bold; display: none; }
+        
+        /* 牧場風基本資訊區塊 */
+        .meta-form { 
+            background: var(--milk-blue); 
+            border: 3px solid var(--cow-black); 
+            border-radius: 10px; 
+            padding: 16px; 
+            margin-bottom: 20px; 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 16px; 
+        }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-weight: bold; font-size: 14px; color: var(--cow-black); }
+        
+        .form-group input, .form-group select { 
+            width: 100%;
+            height: 42px; 
+            padding: 8px 12px; 
+            border: 2px solid var(--cow-black); 
+            border-radius: 6px; 
+            font-size: 14px; 
+            font-weight: bold; 
+            background-color: white; 
+            color: var(--text-main); 
+            outline: none;
+        }
+        
+        .table-container { overflow-x: auto; border: 3px solid var(--cow-black); border-radius: 10px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; background: var(--cow-white); table-layout: fixed; }
+        th { background-color: var(--cow-black); color: var(--cow-white); font-weight: bold; padding: 12px 8px; font-size: 15px; text-align: center; }
+        td { padding: 10px 6px; border-bottom: 2px solid #eeeeee; vertical-align: middle; font-weight: bold; }
+        tr:hover { background-color: var(--milk-blue); }
+        
+        /* 手機排版優化 */
+        .idx-cell { font-size: 15px; color: var(--cow-black); text-align: center; }
+        .medicine-name { font-weight: bold; color: var(--cow-black); }
+        .editable-med { width: 100%; padding: 4px 6px; border: 2px dashed transparent; background: transparent; font-weight: bold; font-size: 15px; outline: none; color: var(--cow-black); font-family: inherit; white-space: normal; word-break: break-all; }
+        .admin-mode .editable-med { border-color: var(--accent-orange); background: #fffde7; border-radius: 4px; }
+        
+        .input-cell { width: 100%; padding: 8px 6px; border: 2px solid var(--border-color); border-radius: 6px; font-size: 14px; font-weight: bold; outline: none; font-family: inherit; text-align: center; }
+        .input-cell:focus { border-color: var(--cow-black); background-color: var(--milk-blue); }
+        .input-cell:disabled { background-color: #f1f2f6; color: #a4b0be; cursor: not-allowed; border-color: #cccccc; }
+        
+        .status-tag { display: block; padding: 4px 2px; border-radius: 6px; font-size: 11px; font-weight: bold; border: 2px solid transparent; text-align: center; }
+        .status-filled { background-color: #dff9fb; color: #137333; border-color: var(--grass-green); }
+        .status-empty { background-color: #f1f2f6; color: #5f6368; border-color: #ccc; }
+        
+        /* 次級批次列的背景虛線效果，讓使用者看得出是延伸的 */
+        .batch-row { background-color: #fafafa; }
+        .batch-label { font-size: 11px; color: #7f8c8d; text-align: right; padding-right: 8px; }
+        
+        .bottom-actions { display: flex; justify-content: center; padding: 15px 0; border-top: 3px dashed var(--cow-black); }
+        #toast { position: fixed; bottom: 20px; right: 20px; background: var(--cow-black); color: white; padding: 14px 28px; border-radius: 8px; display: none; z-index: 3000; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 2px solid var(--cow-white); font-weight: bold; }
+        
+        .admin-controls-zone { background: #fffde7; border: 3px dashed var(--accent-orange); padding: 14px; margin-bottom: 20px; border-radius: 10px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+        /* 獨立客製化登入彈出視窗 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 4000; }
+        .modal-box { background: white; padding: 24px; border-radius: 12px; width: 320px; box-shadow: 0 12px 30px rgba(0,0,0,0.3); border: 4px solid var(--cow-black); }
+        .modal-box h3 { margin-bottom: 16px; color: var(--cow-black); display: flex; align-items: center; gap: 8px; font-size: 18px; }
+        .modal-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+        .modal-group label { font-size: 14px; font-weight: bold; color: #333; }
+        .modal-group input { padding: 10px; border: 2px solid var(--cow-black); border-radius: 6px; font-size: 14px; font-weight: bold; }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="cow-bar"></div>
+
+        <header>
+            <div class="logo-title">
+                <h1>🐄 （草食）營養與飼料技術研究室-牛組盤點系統 <span id="adminBadge" class="admin-badge">管理者模式</span> <span id="lockBadge" class="lock-badge">🔒 已送出鎖定</span></h1>
+                <p>品項固定保護。有多重效期的品項，可點擊「➕ 增批次」按鈕填寫。填完請點擊下方「確認送出」。</p>
+            </div>
+            <div class="controls">
+                <button class="btn btn-secondary" id="btnAdminToggle" onclick="openAdminModal()">🔒 管理者登入</button>
+                <button class="btn btn-cloud" id="btnSaveToCloud" onclick="saveToGoogleSheets()" disabled>☁️ 儲存並同步至 Google 雲端</button>
+                <button class="btn btn-success" id="btnExportExcel" onclick="exportToExcel()" disabled>📊 導出至 Excel</button>
+            </div>
+        </header>
+
+        <!-- 管理者專用控制區 -->
+        <div id="adminZone" class="admin-controls-zone">
+            <strong style="color: var(--accent-orange); font-size: 15px;">🤠 牧場管理者工具：</strong>
+            <input type="text" id="newMedName" class="input-cell" style="width: 260px; background: white; border: 2px solid var(--cow-black);" placeholder="請輸入欲新增的藥品或資材名稱">
+            <button class="btn btn-warning" onclick="addNewMedicineRow()">加牛隻藥品品項 (自動同步雲端)</button>
+        </div>
+
+        <!-- 歷史紀錄與基本資訊區 -->
+        <div class="meta-form">
+            <div class="form-group">
+                <label>📅 查看歷史紀錄 (每週一次)</label>
+                <select id="recordSelector" onchange="switchWeekRecord()">
+                    <option value="current">【當前】本週新盤點表</option>
+                    <option value="last_week">【歷史】上禮拜紀錄 (2026-06-28)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="inventoryDate">📆 盤點日期</label>
+                <input type="date" id="inventoryDate" value="2026-07-05">
+            </div>
+            <div class="form-group">
+                <label for="inventoryStaff">🤠 值班人員</label>
+                <select id="inventoryStaff">
+                    <option value="鄭昱伸">鄭昱伸</option>
+                    <option value="江采穎">江采穎</option>
+                    <option value="陳玗函">陳玗函</option>
+                    <option value="李裕凱">李裕凱</option>
+                    <option value="邱寶儀">邱寶儀</option>
+                    <option value="吳崇豪">吳崇豪</option>
+                    <option value="王奕庭">王奕庭</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 盤點表格 (新增多批次按鈕結構) -->
+        <div class="table-container">
+            <table id="inventoryTable">
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">序號</th>
+                        <th style="width: 36%;">🥛 藥品/資材名稱</th>
+                        <th style="width: 22%;">🧪 有效日期</th>
+                        <th style="width: 12%;">🔢 數量</th>
+                        <th style="width: 10%;">狀態</th>
+                        <th style="width: 10%;">動作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- 下方送出動作區 -->
+        <div class="bottom-actions">
+            <button class="btn btn-success" id="btnSubmitForm" style="font-size: 16px; padding: 12px 35px;" onclick="submitInventory()">🥛 確認送出本次盤點表 (送出後鎖定)</button>
+            <button class="btn btn-danger" id="btnUnlockForm" style="font-size: 16px; padding: 12px 35px; display: none;" onclick="unlockInventoryByAdmin()">🔓 重新解鎖編輯 (僅限管理員)</button>
+        </div>
+    </div>
+
+    <!-- 管理員登入視窗 -->
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>🤠 牛組・安全驗證</h3>
+            <div class="modal-group">
+                <label for="modalUser">管理者帳號</label>
+                <input type="text" id="modalUser" placeholder="請輸入管理帳號">
+            </div>
+            <div class="modal-group">
+                <label for="modalPass">安全密碼</label>
+                <input type="password" id="modalPass" placeholder="請輸入認證密碼">
+            </div>
+            <div class="modal-btns">
+                <button class="btn btn-secondary" onclick="closeAdminModal()">取消返回</button>
+                <button class="btn btn-primary" onclick="verifyAdminLogin()">登入驗證</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">提示訊息</div>
+
+    <script>
+        const scriptUrl = 'https://script.google.com/macros/s/AKfycbyLYmCQdZ1NHrNFduEKLB7Z4GPmhh8A_Ca_dFqthUPfSpUb6cRw2GAA9QfaI4I4g_J1XA/exec'; 
+
+        let currentMedicines = [];
+
+        // 48種預設藥品清單
+        const fallbackMedicines = [
+            "維補", "寧腸命", "美極命", "科特狀", "ADE", "福托寧", "賜鎮", "益樂富", 
+            "新感冒靈", "安西林鈉", "西吉福", "補畜鈣", "K針", "力刻爽", "得能","福興",
+            "害避驅", "催產素", "GnRH", "PG", "快篩", "讚配尼", "配尼黴素S針", 
+            "代奶粉", "教槽料", "葡萄糖", "輸液水", "沖洗液", "乳酸", "初乳寶",
+            "鈣錠", "磁鐵", "丙二醇", "乙醇", "益生菌", "3mL 針筒", "5mL 針筒",
+            "10mL 針筒", "25mL 針筒", "60mL 針筒", "18G針頭", "滯留針", "輸液管",
+            "乳寶一號", "新萬靈", "乾乳軟膏", "乾乳封膠", "金碘碘膏"
+        ];
+
+        let isAdmin = false;
+        let isSubmitted = false;
+
+        // 渲染主表格：支援多批次
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            currentMedicines.forEach((med, index) => {
+                // 主批次列
+                const tr = document.createElement('tr');
+                tr.id = `main-row-${index}`;
+                tr.setAttribute('data-med-index', index);
+                tr.innerHTML = `
+                    <td class="idx-cell"><b>${index + 1}</b></td>
+                    <td class="medicine-name">
+                        <input type="text" class="editable-med" value="${med}" ${isAdmin ? '' : 'readonly'} id="med-${index}" onchange="currentMedicines[${index}]=this.value">
+                    </td>
+                    <td>
+                        <input type="text" class="input-cell" placeholder="日期" id="date-${index}-0" oninput="updateStatus(${index}, 0)" ${isSubmitted && !isAdmin ? 'disabled' : ''}>
+                    </td>
+                    <td>
+                        <input type="text" class="input-cell" placeholder="數量" id="qty-${index}-0" oninput="updateStatus(${index}, 0)" ${isSubmitted && !isAdmin ? 'disabled' : ''}>
+                    </td>
+                    <td>
+                        <span class="status-tag status-empty" id="status-${index}-0">未填</span>
+                    </td>
+                    <td style="text-align: center;">
+                        <button class="btn btn-warning btn-sm" id="btn-addbatch-${index}" onclick="addBatchField(${index})" ${isSubmitted && !isAdmin ? 'disabled' : ''}>➕ 增批次</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 動態新增「次級批次」輸入列
+        function addBatchField(medIndex) {
+            const tbody = document.getElementById('tableBody');
+            
+            // 計算目前該品項已經有幾個批次列了
+            const existingBatches = document.querySelectorAll(`[id^="batch-row-${medIndex}-"]`);
+            const subIndex = existingBatches.length + 1; // 1, 2, 3...
+
+            const tr = document.createElement('tr');
+            tr.id = `batch-row-${medIndex}-${subIndex}`;
+            tr.className = 'batch-row';
+            tr.setAttribute('data-med-index', medIndex);
+            tr.setAttribute('data-sub-index', subIndex);
+            
+            tr.innerHTML = `
+                <td class="idx-cell"></td>
+                <td class="batch-label">↳ 批次 ${subIndex + 1} :</td>
+                <td>
+                    <input type="text" class="input-cell" placeholder="新日期" id="date-${medIndex}-${subIndex}" oninput="updateStatus(${medIndex}, ${subIndex})" ${isSubmitted && !isAdmin ? 'disabled' : ''}>
+                </td>
+                <td>
+                    <input type="text" class="input-cell" placeholder="新數量" id="qty-${medIndex}-${subIndex}" oninput="updateStatus(${medIndex}, ${subIndex})" ${isSubmitted && !isAdmin ? 'disabled' : ''}>
+                </td>
+                <td>
+                    <span class="status-tag status-empty" id="status-${medIndex}-${subIndex}">未填</span>
+                </td>
+                <td style="text-align: center;">
+                    <button class="btn btn-danger btn-sm" style="background:#ff7675;" onclick="removeBatchField('${tr.id}')" ${isSubmitted && !isAdmin ? 'disabled' : ''}>❌ 刪除</button>
+                </td>
+            `;
+
+            // 將新批次精準插在該藥品主列或是前一個批次列的後面
+            let lastRow = document.getElementById(`batch-row-${medIndex}-${subIndex-1}`);
+            if (!lastRow) {
+                lastRow = document.getElementById(`main-row-${medIndex}`);
+            }
+            lastRow.parentNode.insertBefore(tr, lastRow.nextSibling);
+            showToast(`已成功為「${document.getElementById(`med-${medIndex}`).value}」增加一組批次欄位`);
+        }
+
+        function removeBatchField(rowId) {
+            const row = document.getElementById(rowId);
+            if (row) {
+                row.remove();
+                showToast('已移除該組批次欄位');
+            }
+        }
+
+        function updateStatus(medIndex, subIndex) {
+            const dateVal = document.getElementById(`date-${medIndex}-${subIndex}`).value;
+            const qtyVal = document.getElementById(`qty-${medIndex}-${subIndex}`).value;
+            const statusTag = document.getElementById(`status-${medIndex}-${subIndex}`);
+            
+            if(dateVal || qtyVal) {
+                statusTag.textContent = "已填";
+                statusTag.className = "status-tag status-filled";
+            } else {
+                statusTag.textContent = "未填";
+                statusTag.className = "status-tag status-empty";
+            }
+        }
+
+        function openAdminModal() {
+            if (isAdmin) {
+                isAdmin = false;
+                document.getElementById('adminBadge').style.display = 'none';
+                document.getElementById('adminZone').style.display = 'none';
+                document.getElementById('btnAdminToggle').textContent = '🔒 管理者登入';
+                document.getElementById('btnAdminToggle').className = 'btn btn-secondary';
+                
+                document.getElementById('btnExportExcel').disabled = true;
+                document.getElementById('btnSaveToCloud').disabled = true;
+                
+                renderTable();
+                if (isSubmitted) toggleInputsLock(true);
+                showToast('已安全登出管理者模式。');
+            } else {
+                document.getElementById('modalUser').value = '';
+                document.getElementById('modalPass').value = '';
+                document.getElementById('loginModal').style.display = 'flex';
+            }
+        }
+
+        function closeAdminModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        function verifyAdminLogin() {
+            const user = document.getElementById('modalUser').value.trim();
+            const pass = document.getElementById('modalPass').value;
+
+            if (user === "admin" && pass === "admin") {
+                isAdmin = true;
+                document.getElementById('adminBadge').style.display = 'inline-block';
+                document.getElementById('adminZone').style.display = 'flex';
+                document.getElementById('btnAdminToggle').textContent = '🥛 退出管理者';
+                document.getElementById('btnAdminToggle').className = 'btn btn-primary';
+                
+                document.getElementById('btnExportExcel').disabled = false;
+                document.getElementById('btnSaveToCloud').disabled = false;
+                
+                // 保留現有填寫內容重新渲染
+                const currentData = captureCurrentFormInputs();
+                renderTable();
+                restoreFormInputs(currentData);
+                
+                if (isSubmitted) {
+                    toggleInputsLock(false);
+                    document.getElementById('btnSubmitForm').style.display = 'none';
+                    document.getElementById('btnUnlockForm').style.display = 'inline-block';
+                }
+                closeAdminModal();
+                showToast('🥛 牛組主管驗證成功！已開啟修改、導出與同步權限。');
+            } else {
+                alert("管理憑證錯誤，請重新確認！");
+            }
+        }
+
+        // 收集目前畫面上填寫的全部批次資料
+        function captureCurrentFormInputs() {
+            const rows = document.querySelectorAll('#tableBody tr');
+            const data = [];
+            rows.forEach(row => {
+                const medIndex = row.getAttribute('data-med-index');
+                const subIndex = row.getAttribute('data-sub-index') || '0';
+                const dateEl = document.getElementById(`date-${medIndex}-${subIndex}`);
+                const qtyEl = document.getElementById(`qty-${medIndex}-${subIndex}`);
+                if (dateEl && qtyEl) {
+                    data.push({
+                        medIndex: medIndex,
+                        subIndex: subIndex,
+                        isSub: row.classList.contains('batch-row'),
+                        dateVal: dateEl.value,
+                        qtyVal: qtyEl.value
+                    });
+                }
+            });
+            return data;
+        }
+
+        // 還原批次欄位與輸入的內容
+        function restoreFormInputs(dataList) {
+            // 先長出所有的次級批次欄位
+            dataList.forEach(item => {
+                if (item.isSub) {
+                    addBatchField(item.medIndex);
+                }
+            });
+            // 填入數值
+            dataList.forEach(item => {
+                const dateEl = document.getElementById(`date-${item.medIndex}-${item.itemSubIndex || item.subIndex}`);
+                const qtyEl = document.getElementById(`qty-${item.medIndex}-${item.itemSubIndex || item.subIndex}`);
+                if(dateEl) dateEl.value = item.dateVal;
+                if(qtyEl) qtyEl.value = item.qtyVal;
+                updateStatus(item.medIndex, item.itemSubIndex || item.subIndex);
+            });
+        }
+
+        // 同步至雲端 (將批次全部展開後上傳)
+        function saveToGoogleSheets() {
+            if (!isAdmin) {
+                alert("權限不足！只有管理員才能同步至雲端。");
+                return;
+            }
+            if (!confirm("確定要將目前的「含多重批次」盤點資料同步寫入 Google 雲端嗎？")) return;
+
+            showToast('🚀 正在同步至 Google 雲端，請稍候...');
+
+            const date = document.getElementById('inventoryDate').value;
+            const staff = document.getElementById('inventoryStaff').value;
+            const inputs = captureCurrentFormInputs();
+
+            const payload = {
+                date: date,
+                staff: staff,
+                items: inputs.map((item, idx) => {
+                    const medName = document.getElementById(`med-${item.medIndex}`).value;
+                    const suffix = item.isSub ? ` (批次${parseInt(item.subIndex)+1})` : '';
+                    return {
+                        id: idx + 1,
+                        name: medName + suffix,
+                        dateVal: item.dateVal,
+                        qtyVal: item.qtyVal
+                    };
+                })
+            };
+
+            fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'no-cors', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(() => {
+                showToast('☁️ 多重批次資料已成功同步至 Google 雲端試算表！');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('連線至 Google 發生錯誤。');
+            });
+        }
+
+        function submitInventory() {
+            const inputDateVal = document.getElementById('inventoryDate').value;
+            if (!inputDateVal) {
+                alert("請先選擇盤點日期！");
+                return;
+            }
+            
+            const selectedDate = new Date(inputDateVal);
+            const dayOfWeek = selectedDate.getDay(); 
+            
+            if (dayOfWeek !== 6 && dayOfWeek !== 0) {
+                alert("❌ 盤點失敗：系統設定僅限於「週六」或「週日」才能送出盤點表！");
+                return;
+            }
+
+            const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
+            const pastDaysOfYear = (selectedDate - startOfYear) / 86400000;
+            const weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+            const storageKey = `cow_inventory_submitted_year${selectedDate.getFullYear()}_week${weekNumber}`;
+
+            if (!isAdmin && localStorage.getItem(storageKey) === 'true') {
+                alert("❌ 阻擋送出：本週此日期已經送出過盤點表，不可重複送出！");
+                return;
+            }
+
+            if (!confirm("確定要送出本次盤點表嗎？送出後資料將鎖定，值班人員不可再修改。")) return;
+            
+            localStorage.setItem(storageKey, 'true');
+            isSubmitted = true;
+            document.getElementById('lockBadge').style.display = 'inline-block';
+            if (!isAdmin) toggleInputsLock(true);
+            showToast('🥛 盤點表已送出，進入安全鎖定狀態。');
+        }
+
+        function unlockInventoryByAdmin() {
+            if (!isAdmin) return;
+            
+            const inputDateVal = document.getElementById('inventoryDate').value;
+            if (inputDateVal) {
+                const selectedDate = new Date(inputDateVal);
+                const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
+                const pastDaysOfYear = (selectedDate - startOfYear) / 86400000;
+                const weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+                const storageKey = `cow_inventory_submitted_year${selectedDate.getFullYear()}_week${weekNumber}`;
+                localStorage.removeItem(storageKey);
+            }
+
+            isSubmitted = false;
+            document.getElementById('lockBadge').style.display = 'none';
+            document.getElementById('btnSubmitForm').style.display = 'inline-block';
+            document.getElementById('btnUnlockForm').style.display = 'none';
+            toggleInputsLock(false);
+            showToast('表單已由管理員重新解鎖。');
+        }
+
+        function toggleInputsLock(lockStatus) {
+            const inputs = document.querySelectorAll('#tableBody input, #tableBody button');
+            inputs.forEach(el => el.disabled = lockStatus);
+            document.getElementById('inventoryDate').disabled = lockStatus;
+            document.getElementById('inventoryStaff').disabled = lockStatus;
+            document.getElementById('btnSubmitForm').disabled = lockStatus;
+        }
+
+        function switchWeekRecord() {
+            const selector = document.getElementById('recordSelector');
+            if (selector.value === "current") {
+                document.getElementById('inventoryDate').value = "2026-07-05";
+                document.getElementById('inventoryStaff').value = "鄭昱伸";
+                isSubmitted = false;
+                document.getElementById('lockBadge').style.display = 'none';
+                document.getElementById('btnSubmitForm').style.display = 'inline-block';
+                document.getElementById('btnUnlockForm').style.display = 'none';
+                renderTable();
+                toggleInputsLock(false);
+                showToast('已切換回本週盤點表');
+            } else if (selector.value === "last_week") {
+                // 模擬上週歷史紀錄
+                document.getElementById('inventoryDate').value = "2026-06-28";
+                document.getElementById('inventoryStaff').value = "鄭昱伸";
+                
+                renderTable();
+                // 模擬有些藥品上週有填批次
+                document.getElementById('date-0-0').value = "271002";
+                document.getElementById('qty-0-0').value = "3";
+                updateStatus(0, 0);
+
+                // 模擬第二個藥品有兩組批次
+                addBatchField(1);
+                document.getElementById('date-1-0').value = "261201";
+                document.getElementById('qty-1-0').value = "10";
+                updateStatus(1, 0);
+                document.getElementById('date-1-1').value = "280514";
+                document.getElementById('qty-1-1').value = "5";
+                updateStatus(1, 1);
+
+                isSubmitted = true;
+                document.getElementById('lockBadge').style.display = 'inline-block';
+                if (!isAdmin) {
+                    toggleInputsLock(true);
+                } else {
+                    document.getElementById('btnSubmitForm').style.display = 'none';
+                    document.getElementById('btnUnlockForm').style.display = 'inline-block';
+                }
+                showToast('已載入上週歷史多重批次紀錄');
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        // 導出至 Excel (精準將多批次攤平匯出)
+        function exportToExcel() {
+            if (!isAdmin) {
+                alert("權限不足！只有管理員才能導出 Excel 報表。");
+                return;
+            }
+
+            const date = document.getElementById('inventoryDate').value;
+            const staff = document.getElementById('inventoryStaff').value;
+            const selector = document.getElementById('recordSelector');
+            const weekText = selector.options[selector.selectedIndex].text;
+
+            const data = [
+                [`牛組藥品多重批次盤點報表 (${weekText})`],
+                [`盤點日期: ${date}`, `值班人員: ${staff}`],
+                [], 
+                ["項次", "藥品/資材名稱", "有效日期 / 批號", "盤點數量", "規格類型"]
+            ];
+
+            const formInputs = captureCurrentFormInputs();
+            formInputs.forEach((item, index) => {
+                const medName = document.getElementById(`med-${item.medIndex}`).value;
+                const typeText = item.isSub ? `批次 ${parseInt(item.subIndex)+1}` : "主批次";
+                data.push([index + 1, medName, item.dateVal, item.qtyVal, typeText]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "多批次明細");
+            XLSX.writeFile(wb, `牛組藥品多批次盤點表_${date}.xlsx`);
+            showToast('🐄 多批次報表成功導出至 Excel！');
+        }
+
+        function addNewMedicineRow() {
+            if (!isAdmin) return;
+            const newMedInput = document.getElementById('newMedName');
+            const name = newMedInput.value.trim();
+            if (!name) {
+                alert("請先輸入藥品名稱再新增！");
+                return;
+            }
+            
+            if (!confirm(`確定要將「${name}」永久新增至雲端藥品清單嗎？`)) return;
+            showToast('🚀 正在同步新增品項至雲端...');
+
+            fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: "addMedicine",
+                    name: name
+                })
+            })
+            .then(() => {
+                const currentData = captureCurrentFormInputs();
+                currentMedicines.push(name);
+                renderTable();
+                restoreFormInputs(currentData);
+                newMedInput.value = '';
+                showToast(`🐄 成功！「${name}」已加入最末端。`);
+            })
+            .catch(error => {
+                alert('同步至雲端失敗。');
+            });
+        }
+
+        // 雲端載入與 JSONP 超時機制
+        window.onload = function() {
+            showToast('🔄 正在從 Google 雲端載入最新藥品清單...');
+            let hasLoaded = false;
+
+            window.handleCloudData = function(res) {
+                hasLoaded = true;
+                if(res.status === "success" && res.data && res.data.length > 0) {
+                    currentMedicines = res.data;
+                    renderTable();
+                    showToast('✅ 雲端藥品清單載入成功！');
+                } else {
+                    currentMedicines = fallbackMedicines;
+                    renderTable();
+                    showToast('⚠️ 已啟用內建預設清單。');
+                }
+                try { document.getElementById('jsonpScript').remove(); } catch(e){}
+            };
+
+            setTimeout(function() {
+                if (!hasLoaded) {
+                    currentMedicines = fallbackMedicines;
+                    renderTable();
+                    showToast('📴 雲端連線逾時，已啟用本地備援清單。');
+                }
+            }, 4000);
+
+            try {
+                const script = document.createElement('script');
+                script.id = 'jsonpScript';
+                script.src = scriptUrl + (scriptUrl.indexOf('?') >= 0 ? '&' : '?') + 'callback=handleCloudData';
+                document.body.appendChild(script);
+            } catch(err) {
+                currentMedicines = fallbackMedicines;
+                renderTable();
+            }
+        };
+    </script>
+</body>
+</html>
